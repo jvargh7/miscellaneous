@@ -1,0 +1,174 @@
+---
+title: "Sensitivity Analysis"
+author: "Jithin Sam Varghese"
+date: "January 2, 2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###0. Setup
+Reading packages
+```{r}
+library(readxl)
+library(ggplot2)
+library(data.table)
+library(Hmisc)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(binom)
+library(gridExtra)
+library(grid)
+```
+
+Creating file paths
+```{r}
+
+if(Sys.info()["user"]=="JVARGH7"){
+  path_ic_documentation <- "C:/code/support/interstitial_cystitis/documentation"
+  path_ic_data <- "C:/Cloud/OneDrive - Emory University/Papers/Interstitial Cystitis/data"
+  path_ic_save <- "C:/Cloud/OneDrive - Emory University/Papers/Interstitial Cystitis/working"
+}
+
+
+
+```
+
+###1. Data Cleaning
+Reading the data into R
+```{r}
+ic_sensitivity <- readxl::read_xlsx(paste0(path_ic_data,"/De-identified covariates data_20190102.xlsx"))
+
+```
+
+
+```{r}
+colnames(ic_sensitivity) <- c("id","ic_list","cases",
+                  "age_last_visit","gender","race","smoking",
+                  "elmiron","hydroxyzine","tca","gabapentin","hydroxychloroquine",
+                  "cyclobenzaprine","methenamine","phenazopyridine","oxybutynin")
+ic_sensitivity <-  ic_sensitivity %>% filter(!is.na(id))
+```
+
+```{r}
+ic_sensitivity <- ic_sensitivity %>% filter(!is.na(ic_list))
+```
+
+
+Labeling different columns
+```{r}
+ic_sensitivity$cases <- as.factor(ic_sensitivity$cases)
+levels(ic_sensitivity$cases) <- c("1 Definite","2 Possibly", "3 Not", "4 No images")
+table(ic_sensitivity$cases,useNA = "always")
+
+```
+
+```{r}
+ic_sensitivity$gender <- as.factor(ic_sensitivity$gender)
+levels(ic_sensitivity$gender) <- c("1 Female", "2 Male")
+table(ic_sensitivity$gender, useNA= "always")
+```
+
+```{r}
+ic_sensitivity$race <- as.factor(ic_sensitivity$race)
+levels(ic_sensitivity$race) <- c("1 White","2 Black", "3 Other")
+table(ic_sensitivity$race,useNA = "always")
+```
+
+```{r}
+ic_sensitivity$smoking <- as.factor(ic_sensitivity$smoking)
+levels(ic_sensitivity$smoking) <- c("1 Never", "2 Current", "3 Former")
+table(ic_sensitivity$smoking,useNA = "always")
+```
+
+```{r}
+ic_sensitivity$elmiron <- with(ic_sensitivity,ifelse(!is.na(elmiron),1,0))
+ic_sensitivity$hydroxyzine <- with(ic_sensitivity,ifelse(!is.na(hydroxyzine),1,0))
+ic_sensitivity$tca <- with(ic_sensitivity,ifelse(!is.na(tca),1,0))
+ic_sensitivity$gabapentin <- with(ic_sensitivity,ifelse(!is.na(gabapentin),1,0))
+ic_sensitivity$hydroxychloroquine <- with(ic_sensitivity,ifelse(!is.na(hydroxychloroquine),1,0))
+ic_sensitivity$cyclobenzaprine <- with(ic_sensitivity,ifelse(!is.na(cyclobenzaprine),1,0))
+ic_sensitivity$methenamine <- with(ic_sensitivity,ifelse(!is.na(methenamine),1,0))
+ic_sensitivity$phenazopyridine <- with(ic_sensitivity,ifelse(!is.na(phenazopyridine),1,0))
+ic_sensitivity$oxybutynin <- with(ic_sensitivity,ifelse(!is.na(oxybutynin),1,0))
+
+ic_sensitivity <- ic_sensitivity %>% mutate_at(c("elmiron","hydroxyzine",
+                         "tca","gabapentin","hydroxychloroquine",
+                         "cyclobenzaprine","methenamine",
+                         "phenazopyridine","oxybutynin"),
+                       funs(factor(.,labels=c("no","yes"))))
+```
+
+Generating Summary Statistics:
+The variable ID has been ignored.
+```{r}
+describe(ic_sensitivity %>% select(-id,-ic_list))
+```
+
+###2. 1,2 vs 3,4
+####A. Hypothesis Tests
+
+```{r}
+ic_sensitivity$outcome <- with(ic_sensitivity, as.factor(ifelse(cases %in% c("1 Definite", "2 Possibly"),"yes","no")))
+table(ic_sensitivity$outcome,useNA="always")
+```
+
+#####Summary for Cases (Outcome = Yes)
+```{r}
+describe(ic_sensitivity %>% filter(outcome=="yes") %>% select(-id,-ic_list))
+```
+
+#####Summary for Non-cases (Outcome = No)
+```{r}
+describe(ic_sensitivity %>% filter(outcome=="no") %>% select(-id,-ic_list))
+```
+
+#####Fisher's Exact Tests
+Odds ratio values given here are "hypothesized odds ratio"- different from sample odds ratio which we typically report.
+Sample odds ratio given in next section
+```{r}
+ic_sensitivity %>% select(-id,-ic_list,-cases,-outcome,-age_last_visit) %>% 
+  sapply(.,y= ic_sensitivity$outcome,function(x,y) fisher.test(y,x))
+```
+
+Levene's test for Equality of variance does not reject the null hypothesis (Variances are equal)
+```{r}
+car::leveneTest(age_last_visit~outcome,data=ic_sensitivity)
+```
+We will use Independent Two-sample T-test (Pooled)
+We do not reject the null hypothesis that age at last visit is different across the outcome group
+```{r}
+t.test(age_last_visit~outcome,data=ic_sensitivity,var.equal=TRUE)
+```
+
+
+```{r}
+with(ic_sensitivity,table(outcome,elmiron))
+```
+#####Sample Odds ratio
+```{r}
+ic_sensitivity %>% select(-id,-ic_list,-cases,-outcome,-age_last_visit) %>% 
+  sapply(.,y= ic_sensitivity$outcome,function(x,y) exp(coef(glm(y~x,family="binomial"))))
+```
+
+```{r}
+confint_glm <- function(x,y){
+  mod <- glm(y~x,family="binomial")
+  mod_df <- broom::tidy(mod)
+  mod_df <- mod_df %>% mutate(lci = exp(estimate-1.96*std.error),
+                              uci = exp(estimate+1.96*std.error)) %>% 
+    mutate(estimate = exp(estimate)) %>% select(term,estimate,lci,uci)
+  print(mod_df)
+}
+
+
+ic_sensitivity %>% select(-id,-cases,-outcome,-ic_list) %>% 
+  sapply(.,y= ic_sensitivity$outcome,function(x,y) {confint_glm(x,y)})
+
+```
+

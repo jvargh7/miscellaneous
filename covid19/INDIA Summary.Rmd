@@ -1,0 +1,71 @@
+---
+title: "COVID 19 Summary"
+author: "Jithin Sam Varghese"
+date: "May 28, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+dataset <- bind_rows(read.csv("https://api.covid19india.org/csv/latest/raw_data1.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                     read.csv("https://api.covid19india.org/csv/latest/raw_data2.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                     read.csv("https://api.covid19india.org/csv/latest/raw_data3.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                     read.csv("https://api.covid19india.org/csv/latest/raw_data4.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                     read.csv("https://api.covid19india.org/csv/latest/raw_data5.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                      read.csv("https://api.covid19india.org/csv/latest/raw_data6.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                      read.csv("https://api.covid19india.org/csv/latest/raw_data7.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                      read.csv("https://api.covid19india.org/csv/latest/raw_data8.csv") %>% 
+                       mutate(Age.Bracket = as.character(Age.Bracket)),
+                     )
+
+
+state_tests <- read.csv("https://api.covid19india.org/csv/latest/statewise_tested_numbers_data.csv")
+state_daily <- read.csv("https://api.covid19india.org/csv/latest/state_wise_daily.csv")
+```
+
+```{r}
+state_tests %>% 
+  mutate(Updated.On = as.character(Updated.On) %>% lubridate::dmy(.),
+         Test.positivity.rate = str_replace(Test.positivity.rate,"%","") %>% 
+           as.numeric(.)) %>%
+  dplyr::select(State,Updated.On,Test.positivity.rate,Tests.per.thousand) %>% 
+  pivot_longer(names_to = "Type",values_to = "Value",cols=contains("Test")) %>% 
+ggplot(data=.,
+       aes(x=Updated.On,
+           y=Value,
+           group=Type,
+           col=Type)) +
+  geom_line() +
+  facet_wrap(~State) +
+  theme_bw() +
+  geom_hline(aes(yintercept=10),col="red",linetype=2) +
+  geom_hline(aes(yintercept=1.5),col="black",linetype=3)
+```
+```{r}
+state_tests %>% 
+  mutate(Updated.On = as.character(Updated.On) %>% lubridate::dmy(.),
+         Test.positivity.rate = str_replace(Test.positivity.rate,"%","") %>% 
+           as.numeric(.)) %>%
+  # dplyr::select(State,Updated.On,Test.positivity.rate,Tests.per.thousand) %>% 
+  # pivot_longer(names_to = "Type",values_to = "Value",cols=contains("Test")) %>% 
+ggplot(data=.,
+       aes(x=Updated.On,
+           y=Test.positivity.rate
+           )) +
+  geom_line() +
+  facet_wrap(~State) +
+  theme_bw() +
+  geom_hline(aes(yintercept=10),col="red",linetype=2) +
+  geom_hline(aes(yintercept=1.5),col="black",linetype=3)
+```
+

@@ -1,0 +1,2 @@
+devinfo <- readr::read_csv(paste0("D:/BKP/D Drive/One Drive Jithin/OneDrive - St John's National Academy of Health Sciences/Tale of Two Cities/Analysis_Two_Cities/00000_Data/Census 2010-11/DevInfo India_2011_en/DevInfo India_2011_en.csv"))
+census_pca <- readr::read_csv(paste0("D:/BKP/D Drive/One Drive Jithin/OneDrive - St John's National Academy of Health Sciences/Tale of Two Cities/Analysis_Two_Cities/00000_Data/Census 2010-11/India Census PCA_2013_en/India Census PCA_2013_en.csv"))

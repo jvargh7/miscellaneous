@@ -1,0 +1,114 @@
+---
+title: "ratio_heatmap"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+df <- data.frame(reg1 = runif(n=10,0,2),
+                 reg2 = runif(n=10,0,2),
+                 reg3 = runif(n=10,0,2))
+heatmap(as.matrix(df),
+        labRow = c(paste0("A",1:10)),
+        labCol = c(paste0("reg",1:3)),
+        Rowv=NA,
+        Colv=NA,
+        col=cm.colors(256),
+        scale="row")
+```
+
+```{r}
+library(lattice)
+# https://talesofr.wordpress.com/2013/05/07/heatmaps-with-p-values-2-coloured-according-to-odds-ratio/
+rownames(df) <- c(paste0("A",1:10))
+
+color.ramp.length <- 20
+negative.length <- 20
+positive.length <- 20
+cols <- c(colorRampPalette(c("green3", "white"))(negative.length),
+          colorRampPalette(c("white", "orangered"))(positive.length))
+# https://stackoverflow.com/questions/46842118/r-levelplot-color-green-white-red-white-on-0-according-to-one-variable-but-s
+levelplot(as.matrix(df), 
+          # cuts=5,
+           at=seq(0,2,by = 0.1),
+          row.values = c(paste0("A",1:10)),
+          column.values = c(paste0("reg",1:3)),
+          col.regions=cols
+)
+```
+
+Working on PREP data
+```{r}
+prep_or <- readxl::read_excel("H:/support/jingjing_prep.xlsx",sheet="clean")
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+prep_or <- prep_or %>% separate(awareness,into=c("awareness_or","awareness_ci"),sep=" \\(")
+prep_or <- prep_or %>% separate(willingness,into=c("willingness_or","willingness_ci"),sep=" \\(")
+prep_or <- prep_or %>% separate(uptake,into=c("uptake_or","uptake_ci"),sep=" \\(")
+
+prep_or <- prep_or %>% separate(awareness_ci,into=c("awareness_lci","awareness_uci"),sep=",")
+prep_or <- prep_or %>% separate(willingness_ci,into=c("willingness_lci","willingness_uci"),sep=",")
+prep_or <- prep_or %>% separate(uptake_ci,into=c("uptake_lci","uptake_uci"),sep=",")
+
+prep_or$awareness_uci <- stringr::str_replace(prep_or$awareness_uci,"\\)","")
+prep_or$willingness_uci <- stringr::str_replace(prep_or$willingness_uci,"\\)","")
+prep_or$uptake_uci <- stringr::str_replace(prep_or$uptake_uci,"\\)","")
+
+```
+
+
+```{r}
+prep_or[,4:12] <- sapply(prep_or[,4:12],as.numeric)
+prep_or$order <- c(1:29)
+prep_or_plotdf <- prep_or %>% select(-variables) %>% group_by(Level,group) %>% summarize_all(.funs=mean) %>% arrange(-order)
+
+
+prep_or_plotdf$awareness_or_sig <- with(prep_or_plotdf,
+                                          ifelse((awareness_uci>1 & awareness_lci>1) | (awareness_uci<1 & awareness_lci<1),
+                                                 awareness_or,1))
+prep_or_plotdf$willingness_or_sig <- with(prep_or_plotdf,
+                                          ifelse((willingness_uci>1 & willingness_lci>1) | (willingness_uci<1 & willingness_lci<1),
+                                                 willingness_or,1))
+prep_or_plotdf$uptake_or_sig <- with(prep_or_plotdf,
+                                          ifelse((uptake_uci>1 & uptake_lci>1) | (uptake_uci<1 & uptake_lci<1),
+                                                 uptake_or,1))
+
+prep_or_plotdf$uptake_or_sig <- with(prep_or_plotdf, ifelse(uptake_or_sig>10,10,uptake_or_sig))
+
+prep_or_plotdf_mat <- prep_or_plotdf[,c("awareness_or_sig","willingness_or_sig","uptake_or_sig")]
+rownames(prep_or_plotdf_mat) <- prep_or_plotdf$group
+colnames(prep_or_plotdf_mat) <- c("Awareness","Willingness","Uptake")
+
+
+
+prep_or_plotdf_mat <- as.matrix(prep_or_plotdf_mat)
+
+library(RColorBrewer)
+cols <- c(rev(brewer.pal(5,"YlOrRd")),"#FFFFFF",brewer.pal(8,"YlGn")[2:8])
+
+png("test.png",width = 15,height=10,units="in",res=1200)
+# https://stackoverflow.com/questions/46842118/r-levelplot-color-green-white-red-white-on-0-according-to-one-variable-but-s
+prep_or_fig <- levelplot(t(prep_or_plotdf_mat), 
+          # cuts=17,
+           at=c(0,0.2,0.4,0.6,0.8,0.99,1.01,1.25,1.5,1.75,2.5,5,10),
+          scales=list(y=list(rot=0), x=list(rot=90),alternating=1, cex=c(1.4,1.4)),
+          col.regions=cols,
+          colorkey = list(labels=list(cex=1.4)),
+          xlab = "",
+          ylab = ""
+          
+)
+
+print(prep_or_fig)
+dev.off()
+
+```
+

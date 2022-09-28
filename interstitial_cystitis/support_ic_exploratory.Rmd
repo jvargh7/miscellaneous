@@ -1,0 +1,262 @@
+---
+title: "1. Exploratory Analysis"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###0. Setup
+Reading packages
+```{r}
+library(tidyverse)
+```
+
+Creating file paths
+```{r}
+
+if(Sys.info()["user"]=="JVARGH7"){
+  path_ic_documentation <- "C:/code/support/interstitial_cystitis/documentation"
+  path_ic_data <- "C:/Cloud/OneDrive - Emory University/Papers/Interstitial Cystitis/data"
+  path_ic_save <- "C:/Cloud/OneDrive - Emory University/Papers/Interstitial Cystitis/working"
+}
+
+
+
+```
+
+IC- Billing
+EMA IC- Medical Record
+x - Yes
+
+###1. Data Cleaning
+Reading the data into R
+```{r}
+ic <- readxl::read_xlsx(paste0(path_ic_data,"/De-identified covariates data_20190111.xlsx"))
+
+```
+
+Renaming columns:
+The column names were changed to make it suitable for analysis
+```{r}
+colnames(ic) <- c("id","ic_list","ema_ic_dx_search","ic_chart_review","ic_diagnosis","cases",
+                  "age_last_visit","gender","race","smoking",
+                  "elmiron","hydroxyzine","tca","gabapentin","hydroxychloroquine",
+                  "cyclobenzaprine","methenamine","phenazopyridine","oxybutynin")
+ic <- ic[!is.na(ic$id),]
+```
+
+Creating dataset
+```{r}
+ic <- ic %>% 
+  filter(ic$ic_diagnosis == "1")
+```
+
+```{r}
+ic <- ic %>% 
+  mutate(source_billing = case_when(ic_list == "x"~ "yes",
+                             TRUE ~ "no"),
+         source_records = case_when(ema_ic_dx_search == "x" ~ "yes",
+                                    TRUE ~ "no")) %>% 
+  select(id,source_billing,source_records,
+         cases:oxybutynin) 
+```
+
+
+Labeling different columns
+```{r}
+ic$cases <- as.factor(ic$cases)
+levels(ic$cases) <- c("1 Definite","2 Possibly", "3 Not", "4 No images")
+table(ic$cases,useNA = "always")
+
+```
+
+```{r}
+ic$gender <- as.factor(ic$gender)
+levels(ic$gender) <- c("1 Female", "2 Male")
+table(ic$gender, useNA= "always")
+```
+
+
+```{r}
+ic$race <- as.factor(ic$race)
+levels(ic$race) <- c("1 White","2 Black", "3 Other")
+table(ic$race,useNA = "always")
+```
+
+```{r}
+ic <- ic %>% 
+  mutate(smoking = case_when(smoking == "1"~ "1 Never",
+                             smoking == "2" ~ "2 Current",
+                             smoking == "3" ~ "3 Former",
+                             TRUE ~ "Missing")) %>% 
+  mutate(smoking = as.factor(smoking))
+
+table(ic$smoking)
+
+```
+
+```{r}
+ic$elmiron <- with(ic,ifelse(!is.na(elmiron),1,0))
+ic$hydroxyzine <- with(ic,ifelse(!is.na(hydroxyzine),1,0))
+ic$tca <- with(ic,ifelse(!is.na(tca),1,0))
+ic$gabapentin <- with(ic,ifelse(!is.na(gabapentin),1,0))
+ic$hydroxychloroquine <- with(ic,ifelse(!is.na(hydroxychloroquine),1,0))
+ic$cyclobenzaprine <- with(ic,ifelse(!is.na(cyclobenzaprine),1,0))
+ic$methenamine <- with(ic,ifelse(!is.na(methenamine),1,0))
+ic$phenazopyridine <- with(ic,ifelse(!is.na(phenazopyridine),1,0))
+ic$oxybutynin <- with(ic,ifelse(!is.na(oxybutynin),1,0))
+
+ic <- ic %>% mutate_at(c("elmiron","hydroxyzine",
+                         "tca","gabapentin","hydroxychloroquine",
+                         "cyclobenzaprine","methenamine",
+                         "phenazopyridine","oxybutynin"),
+                       funs(factor(.,labels=c("no","yes"))))
+```
+
+```{r}
+ic$outcome <- with(ic, as.factor(ifelse(cases %in% c("1 Definite", "2 Possibly"),"yes","no")))
+
+ic <- ic %>% 
+  mutate(outcome = case_when(cases %in% c("1 Definite", "2 Possibly") ~ "yes",
+                             TRUE ~ "no")) %>% 
+  mutate(outcome = as.factor(outcome))
+
+table(ic$outcome,useNA="always")
+```
+
+Generating Summary Statistics:
+The variable ID has been ignored.
+```{r}
+library(tableone)
+
+vars_table1 <- ic %>% 
+  select(-id) %>% 
+ names()
+tab1 <- tableone::CreateTableOne(c(vars_table1),data=ic, includeNA = TRUE) %>% 
+  print(exact = "stage", quote = FALSE, noSpaces = TRUE, printToggle = FALSE)
+print(tab1)
+write.csv(tab1, paste0(path_ic_save,"/tableone_overall.csv"))
+```
+
+```{r}
+Hmisc::describe(ic %>% filter(outcome == "yes") %>% select(-id,-outcome))
+```
+
+
+```{r}
+Hmisc::describe(ic %>% filter(outcome == "no") %>% select(-id,-outcome))
+```
+
+
+###2. 1,2 vs 3,4
+####A. Hypothesis Tests
+
+
+
+```{r}
+vars_table1 <- ic %>% 
+  select(-id,-cases) %>% 
+ names()
+tab1_2 <- tableone::CreateTableOne(c(vars_table1), strata="outcome",data=ic,includeNA = TRUE) %>% 
+  print(exact = "stage", quote = FALSE, noSpaces = TRUE, printToggle = FALSE)
+print(tab1_2)
+write.csv(tab1_2, paste0(path_ic_save,"/tableone_stratified.csv"))
+```
+
+
+```{r}
+
+```
+
+
+#####Fisher's Exact Tests
+Odds ratio values given here are "hypothesized odds ratio"- different from sample odds ratio which we typically report.
+Sample odds ratio given in next section
+```{r}
+ic_fishers <- ic %>% select(-id,-cases,-source_billing,-source_records,-outcome,-age_last_visit) %>% 
+  sapply(.,y= ic$outcome,function(x,y) fisher.test(y,x))
+```
+
+```{r}
+t.test(age_last_visit~outcome,data=ic,var.equal=TRUE)
+age_p <- t.test(age_last_visit~outcome,var.equal=TRUE,data=ic)$p.value
+```
+
+
+```{r}
+fishers_df <- bind_rows(t(map_df(ic_fishers,~.x$p.value)) %>% 
+                          data.frame() %>%
+                          setNames("p_test") %>% 
+                          mutate(var = rownames(.)),
+                        data.frame(p_test = age_p, var = "age_last_visit")
+) %>% 
+  arrange(p_test) %>% 
+  mutate(rank = seq(1:nrow(.))) %>% 
+  mutate(hb_cutoff = 0.05/(nrow(.)-rank+1)) %>% 
+  mutate(significance = case_when(p_test < hb_cutoff ~ "yes",
+                                  TRUE ~ "no")) %>% 
+  mutate(p_value = round(p_test,3))
+write.csv(fishers_df, paste0(path_ic_save,"/tableone_fishers.csv"))
+print(fishers_df)
+```
+
+
+#####Sample Odds ratio
+```{r}
+ic_sor <- ic %>% select(-id,-cases,-source_billing,-source_records,-outcome,-age_last_visit) %>% 
+  sapply(.,y= ic$outcome,function(x,y) exp(coef(glm(y~x,family="binomial"))))
+
+
+tidy_estimates <- function(x,y){
+  broom::tidy(x) %>% 
+    mutate(var = y)
+}
+
+ic_glm <- ic %>% select(-id,-cases,-source_billing,-source_records,-outcome) %>% 
+  lapply(.,y= ic$outcome,function(x,y) glm(y~x,family="binomial"))
+
+tidy_coefficients <- map2_df(ic_glm,names(ic_glm),function(x,y) {tidy_estimates(x,y)}) %>% 
+  mutate(exp_estimate = case_when(str_detect(term,"sd_") ~ estimate,
+                              TRUE ~ exp(estimate)),
+         exp_lci = case_when(str_detect(term,"sd_") ~ NA_real_,
+                              TRUE ~ exp(estimate -1.96*std.error)),
+         exp_uci = case_when(str_detect(term,"sd_") ~ NA_real_,
+                              TRUE ~ exp(estimate +1.96*std.error))) %>% 
+  mutate(odds_ratio = paste0(round(exp_estimate,2),
+                             " (",round(exp_lci,2),
+                             ",",round(exp_uci,2),
+                             ")"))
+write.csv(tidy_coefficients, paste0(path_ic_save,"/tableone_sor.csv"))
+```
+
+###3. Stratify by Elmiron status
+```{r}
+
+vars_table2 <- ic %>% 
+  select(cases,outcome) %>% 
+ names()
+tab2 <- tableone::CreateTableOne(c(vars_table2), strata="elmiron",data=ic) %>% 
+  print(exact = "stage", quote = FALSE, noSpaces = TRUE, printToggle = FALSE)
+print(tab2)
+write.csv(tab2, paste0(path_ic_save,"/tabletwo_elmiron.csv"))
+
+```
+
+
+```{r}
+tab2 <- tableone::CreateTableOne(c(vars_table2),data=ic) %>% 
+  print(exact = "stage", quote = FALSE, noSpaces = TRUE, printToggle = FALSE)
+print(tab2)
+```
+
+
+###4. Save
+```{r}
+saveRDS(ic,paste0(path_ic_save,"/ic_submit.RDS"))
+```
+
